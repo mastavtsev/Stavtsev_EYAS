@@ -1,0 +1,114 @@
+output_dir: /home/jupyter/datasphere/project/torchtune/result_dir # /home/vorobyov01/torchtune/result_dir
+
+# Tokenizer
+tokenizer:
+  _component_: torchtune.models.llama2.llama2_tokenizer
+  path: /home/jupyter/datasphere/project/torchtune/YandexGPT-5-Lite-8B-/tokenizer.model
+  max_seq_len: null
+
+# Model Arguments
+model:
+  _component_: torchtune.models.llama3.lora_llama3
+  lora_attn_modules: ['q_proj', 'v_proj',]
+  apply_lora_to_mlp: True
+  apply_lora_to_output: False
+  lora_rank: 8
+  lora_alpha: 16
+  lora_dropout: 0.0
+
+  vocab_size: 129024
+  num_layers: 32
+  num_heads: 32
+  num_kv_heads: 8
+  embed_dim: 4096
+  max_seq_len: 32768
+  intermediate_dim: 14336
+  attn_dropout: 0.0
+  norm_eps: 0.000001
+
+checkpointer:
+  _component_: torchtune.training.FullModelHFCheckpointer
+  checkpoint_dir: /home/jupyter/datasphere/project/torchtune/yandex/YandexGPT-5-Lite-8B-instruct
+  checkpoint_files: [
+    model-00001-of-00004.safetensors,
+    model-00002-of-00004.safetensors,
+    model-00003-of-00004.safetensors,
+    model-00004-of-00004.safetensors
+  ]
+  recipe_checkpoint: null
+  output_dir: ${output_dir}
+  model_type: LLAMA3
+resume_from_checkpoint: False
+save_adapter_weights_only: False
+
+# Dataset and Sampler
+dataset:
+  _component_: torchtune.datasets.instruct_dataset
+  source: /home/jupyter/datasphere/project/ygpt_train_pairs_instruct.yaml
+  template: AlpacaInstructTemplate
+  column_map:
+    instruction: instruction
+    input: input
+    output: output
+  train_on_input: true
+  packed: false
+seed: null
+shuffle: True
+batch_size: 2
+
+# Optimizer and Scheduler
+optimizer:
+  _component_: torch.optim.AdamW
+  fused: True
+  weight_decay: 0.01
+  lr: 3e-4
+lr_scheduler:
+  _component_: torchtune.training.lr_schedulers.get_cosine_schedule_with_warmup
+  num_warmup_steps: 100
+
+loss:
+  _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
+
+# Training
+epochs: 1
+max_steps_per_epoch: null
+gradient_accumulation_steps: 8  # Use to increase effective batch size
+compile: False  # torch.compile the model + loss, True increases speed + decreases memory
+
+# Logging
+metric_logger:
+  _component_: torchtune.training.metric_logging.DiskLogger
+  log_dir: ${output_dir}/logs
+log_every_n_steps: 1
+log_peak_memory_stats: True
+
+# Environment
+device: cuda
+dtype: bf16
+enable_activation_checkpointing: False  # True reduces memory
+enable_activation_offloading: False  # True reduces memory
+
+
+# Profiler (disabled)
+profiler:
+  _component_: torchtune.training.setup_torch_profiler
+  enabled: False
+  #Output directory of trace artifacts
+  output_dir: ${output_dir}/profiling_outputs
+
+  #`torch.profiler.ProfilerActivity` types to trace
+  cpu: True
+  cuda: True
+
+  #trace options passed to `torch.profiler.profile`
+  profile_memory: False
+  with_stack: False
+  record_shapes: True
+  with_flops: False
+
+  # `torch.profiler.schedule` options:
+  # wait_steps -> wait, warmup_steps -> warmup, active_steps -> active, num_cycles -> repeat
+  wait_steps: 5
+  warmup_steps: 3
+  active_steps: 2
+  num_cycles: 1
